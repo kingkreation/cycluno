@@ -11,8 +11,10 @@ import { ExecutionsModule } from './executions/executions.module';
 import { BugsModule } from './bugs/bugs.module';
 import { ReportsModule } from './reports/reports.module';
 import { AiModule } from './ai/ai.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
+  controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{
