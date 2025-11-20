@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: cycluno-backend
+    env: node
+    buildCommand: npm install && npm run build && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm run start:prod
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cycluno-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: cycluno-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: cycluno-db
+    databaseName: cycluno
+    user: cycluno
+  
+  - name: cycluno-redis
+    plan: free
