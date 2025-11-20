@@ -31,8 +31,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(3001);
-  console.log('🚀 Cycluno Backend running on http://localhost:3001');
-  console.log('📚 API Documentation: http://localhost:3001/api/docs');
+  // Use PORT from environment (Render provides this)
+  const port = process.env.PORT || 3001;
+  await app.listen(port, '0.0.0.0'); // Important: bind to 0.0.0.0
+
+  console.log(`🚀 Cycluno Backend running on port ${port}`);
+  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
 }
 bootstrap();
