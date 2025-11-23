@@ -7,7 +7,7 @@ const app_module_1 = require("./app.module");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     app.enableCors({
-        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        origin: '*',
         credentials: true,
     });
     app.useGlobalPipes(new common_1.ValidationPipe({
@@ -23,9 +23,10 @@ async function bootstrap() {
         .build();
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('api/docs', app, document);
-    await app.listen(3001);
-    console.log('🚀 Cycluno Backend running on http://localhost:3001');
-    console.log('📚 API Documentation: http://localhost:3001/api/docs');
+    const port = process.env.PORT || 3001;
+    await app.listen(port, '0.0.0.0');
+    console.log(`🚀 Cycluno Backend running on port ${port}`);
+    console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

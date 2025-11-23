@@ -1,7 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 export declare class AiService {
     private configService;
-    private openai;
+    private genAI;
+    private model;
     constructor(configService: ConfigService);
     extractFeaturesFromPRD(prdContent: string): Promise<any[]>;
     generateTestCases(featureName: string, featureDescription: string): Promise<any[]>;

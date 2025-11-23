@@ -20,11 +20,13 @@ const executions_module_1 = require("./executions/executions.module");
 const bugs_module_1 = require("./bugs/bugs.module");
 const reports_module_1 = require("./reports/reports.module");
 const ai_module_1 = require("./ai/ai.module");
+const health_controller_1 = require("./health/health.controller");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
+        controllers: [health_controller_1.HealthController],
         imports: [
             config_1.ConfigModule.forRoot({ isGlobal: true }),
             throttler_1.ThrottlerModule.forRoot([{

@@ -2,17 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as fs from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS
   app.enableCors({
     origin: '*',
     credentials: true,
   });
 
-  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -27,15 +26,26 @@ async function bootstrap() {
     .setDescription('AI-Powered Test Case Design, Execution & Bug Tracking')
     .setVersion('1.0')
     .addBearerAuth()
+    .addServer('http://localhost:3001', 'Local Development')
+    .addServer('https://cycluno.onrender.com', 'Production')
     .build();
+    
   const document = SwaggerModule.createDocument(app, config);
+  
+  // Setup Swagger UI
   SwaggerModule.setup('api/docs', app, document);
 
-  // Use PORT from environment (Render provides this)
+  // Save swagger.json to file (optional, for local development)
+  if (process.env.NODE_ENV !== 'production') {
+    fs.writeFileSync('./swagger.json', JSON.stringify(document, null, 2));
+    console.log('📄 swagger.json saved to ./swagger.json');
+  }
+
   const port = process.env.PORT || 3001;
-  await app.listen(port, '0.0.0.0'); // Important: bind to 0.0.0.0
+  await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 Cycluno Backend running on port ${port}`);
   console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+  console.log(`📄 Swagger JSON: http://localhost:${port}/api/docs-json`);
 }
 bootstrap();

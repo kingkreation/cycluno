@@ -8,22 +8,28 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const openai_1 = __importDefault(require("openai"));
+const generative_ai_1 = require("@google/generative-ai");
 let AiService = class AiService {
     constructor(configService) {
         this.configService = configService;
-        this.openai = new openai_1.default({
-            apiKey: this.configService.get('OPENAI_API_KEY'),
-        });
+        const apiKey = this.configService.get('GEMINI_API_KEY');
+        if (!apiKey) {
+            console.warn('GEMINI_API_KEY not set. AI features will be disabled.');
+            return;
+        }
+        this.genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+        this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        console.log('Gemini AI initialized');
     }
     async extractFeaturesFromPRD(prdContent) {
+        if (!this.model) {
+            console.warn('Gemini AI not initialized. Returning empty features.');
+            return [];
+        }
         const prompt = `
 You are a product analyst. Extract all features from the following PRD (Product Requirements Document).
 
@@ -32,27 +38,41 @@ For each feature, provide:
 - description: Brief description
 - priority: High, Medium, or Low
 
-Return ONLY a JSON array of features, no other text.
+Return ONLY a valid JSON array of features, no markdown, no code blocks, no other text.
 
 PRD Content:
 ${prdContent}
+
+Example format:
+[
+  {
+    "name": "User Authentication",
+    "description": "Secure login and registration system",
+    "priority": "High"
+  }
+]
     `;
         try {
-            const response = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.3,
-            });
-            const content = response.choices[0].message.content;
-            const features = JSON.parse(content);
-            return features;
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            const features = JSON.parse(cleanText);
+            return Array.isArray(features) ? features : [];
         }
         catch (error) {
-            console.error('AI Feature Extraction Error:', error);
+            console.error('Gemini AI Feature Extraction Error:', error.message);
             throw new Error('Failed to extract features from PRD');
         }
     }
     async generateTestCases(featureName, featureDescription) {
+        if (!this.model) {
+            console.warn('Gemini AI not initialized. Returning empty test cases.');
+            return [];
+        }
         const prompt = `
 You are a QA engineer. Generate comprehensive test cases for the following feature.
 
@@ -62,31 +82,57 @@ Feature Description: ${featureDescription || 'No description provided'}
 For each test case, provide:
 - scenario: Test scenario name
 - description: Brief description of what is being tested
-- steps: Array of step-by-step instructions
-- testData: Sample test data (if applicable)
+- steps: Array of step-by-step instructions (as strings)
+- testData: Sample test data (if applicable, otherwise empty string)
 - expectedResult: Expected outcome
 - priority: High, Medium, or Low
 
 Generate at least 5 diverse test cases covering positive, negative, edge cases, and boundary conditions.
 
-Return ONLY a JSON array of test cases, no other text.
+Return ONLY a valid JSON array of test cases, no markdown, no code blocks, no other text.
+
+Example format:
+[
+  {
+    "scenario": "Valid user login",
+    "description": "Test successful login with valid credentials",
+    "steps": ["Navigate to login page", "Enter valid email", "Enter valid password", "Click login button"],
+    "testData": "email: test@example.com, password: Test123!",
+    "expectedResult": "User is redirected to dashboard",
+    "priority": "High"
+  }
+]
     `;
         try {
-            const response = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.5,
-            });
-            const content = response.choices[0].message.content;
-            const testCases = JSON.parse(content);
-            return testCases;
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            const testCases = JSON.parse(cleanText);
+            return Array.isArray(testCases) ? testCases : [];
         }
         catch (error) {
-            console.error('AI Test Case Generation Error:', error);
+            console.error('Gemini AI Test Case Generation Error:', error.message);
             throw new Error('Failed to generate test cases');
         }
     }
     async generateBugReport(testCase, actualResult) {
+        if (!this.model) {
+            console.warn('Gemini AI not initialized. Returning basic bug report.');
+            return {
+                title: 'Test Failed',
+                description: 'Automated bug report generation unavailable',
+                stepsToReproduce: testCase.steps || [],
+                expectedResult: testCase.expectedResult,
+                actualResult,
+                possibleSolution: 'Manual investigation required',
+                priority: 'Medium',
+                severity: 'Major',
+            };
+        }
         const prompt = `
 You are a QA engineer. A test case has failed. Generate a detailed bug report.
 
@@ -97,33 +143,58 @@ Test Case Information:
 - Steps: ${JSON.stringify(testCase.steps)}
 
 Generate a bug report with:
-- title: Clear, concise bug title
+- title: Clear, concise bug title (max 100 characters)
 - description: Detailed description of the bug
-- stepsToReproduce: Array of steps to reproduce the bug
+- stepsToReproduce: Array of steps to reproduce the bug (as strings)
 - expectedResult: What should happen
 - actualResult: What actually happened
 - possibleSolution: Suggested fix or root cause analysis
 - priority: Critical, High, Medium, or Low
 - severity: Critical, Major, Minor, or Trivial
 
-Return ONLY a JSON object, no other text.
+Return ONLY a valid JSON object, no markdown, no code blocks, no other text.
+
+Example format:
+{
+  "title": "Login fails with valid credentials",
+  "description": "Users cannot log in even with correct email and password",
+  "stepsToReproduce": ["Go to login page", "Enter valid credentials", "Click login"],
+  "expectedResult": "User should be logged in",
+  "actualResult": "Error message displayed",
+  "possibleSolution": "Check authentication service connection",
+  "priority": "High",
+  "severity": "Major"
+}
     `;
         try {
-            const response = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.4,
-            });
-            const content = response.choices[0].message.content;
-            const bugReport = JSON.parse(content);
-            return bugReport;
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            return JSON.parse(cleanText);
         }
         catch (error) {
-            console.error('AI Bug Report Generation Error:', error);
-            throw new Error('Failed to generate bug report');
+            console.error('Gemini AI Bug Report Generation Error:', error.message);
+            return {
+                title: 'Test Failed: ' + testCase.scenario,
+                description: 'Automated bug report generation failed',
+                stepsToReproduce: testCase.steps || [],
+                expectedResult: testCase.expectedResult,
+                actualResult,
+                possibleSolution: 'Manual investigation required',
+                priority: 'Medium',
+                severity: 'Major',
+            };
         }
     }
     async compareResults(expectedResult, actualResult) {
+        if (!this.model) {
+            console.warn('Gemini AI not initialized. Returning no match.');
+            return { match: false, confidence: 0 };
+        }
         const prompt = `
 Compare the following expected and actual test results. Determine if they match.
 
@@ -138,18 +209,27 @@ Consider:
 - Minor formatting differences should not affect the match
 - Focus on functional equivalence
 - Be lenient with whitespace and punctuation
+
+Return ONLY valid JSON, no markdown, no code blocks, no other text.
+
+Example format:
+{
+  "match": true,
+  "confidence": 0.95
+}
     `;
         try {
-            const response = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.2,
-            });
-            const content = response.choices[0].message.content;
-            return JSON.parse(content);
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            return JSON.parse(cleanText);
         }
         catch (error) {
-            console.error('AI Result Comparison Error:', error);
+            console.error('Gemini AI Result Comparison Error:', error.message);
             return { match: false, confidence: 0 };
         }
     }

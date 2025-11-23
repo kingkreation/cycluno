@@ -20,23 +20,30 @@ let QueueService = class QueueService {
         this.testCaseGenQueue = null;
         this.bugAiQueue = null;
         this.redisAvailable = false;
+        const redisUrl = this.configService.get('REDIS_URL');
+        if (!redisUrl) {
+            console.warn('⚠️  REDIS_URL not set. Background jobs disabled.');
+            return;
+        }
         try {
-            const redisUrl = this.configService.get('REDIS_URL') || 'redis://localhost:6379';
             let redisConfig;
             try {
                 const url = new URL(redisUrl);
                 redisConfig = {
                     host: url.hostname,
                     port: parseInt(url.port) || 6379,
+                    password: url.password || undefined,
+                    tls: url.protocol === 'rediss:' ? {} : undefined,
                 };
             }
             catch (error) {
-                const urlParts = redisUrl.replace('redis://', '').split(':');
+                const urlParts = redisUrl.replace(/^rediss?:\/\//, '').split(':');
                 redisConfig = {
                     host: urlParts[0] || 'localhost',
                     port: parseInt(urlParts[1]) || 6379,
                 };
             }
+            console.log('🔗 Connecting to Redis:', `${redisConfig.host}:${redisConfig.port}`);
             this.prdParsingQueue = new bullmq_1.Queue('prd-parsing', { connection: redisConfig });
             this.testCaseGenQueue = new bullmq_1.Queue('testcase-generation', { connection: redisConfig });
             this.bugAiQueue = new bullmq_1.Queue('bug-ai', { connection: redisConfig });
@@ -44,27 +51,27 @@ let QueueService = class QueueService {
             console.log('✅ Redis queues initialized');
         }
         catch (error) {
-            console.warn('⚠️  Redis not available. Background jobs will be skipped.');
-            console.warn('   Start Redis to enable AI features: docker run -d -p 6379:6379 redis:7-alpine');
+            console.warn('⚠️  Redis connection failed. Background jobs disabled.');
+            console.warn('   Error:', error.message);
         }
     }
     async addPRDParsingJob(data) {
         if (!this.redisAvailable || !this.prdParsingQueue) {
-            console.warn('⚠️  Redis not available. PRD parsing job skipped.');
+            console.warn('⚠️  Redis unavailable. PRD parsing skipped.');
             return null;
         }
         return this.prdParsingQueue.add('parse-prd', data);
     }
     async addTestCaseGenerationJob(data) {
         if (!this.redisAvailable || !this.testCaseGenQueue) {
-            console.warn('⚠️  Redis not available. Test case generation job skipped.');
+            console.warn('⚠️  Redis unavailable. Test case generation skipped.');
             return null;
         }
         return this.testCaseGenQueue.add('generate-testcases', data);
     }
     async addBugAiJob(data) {
         if (!this.redisAvailable || !this.bugAiQueue) {
-            console.warn('⚠️  Redis not available. Bug AI job skipped.');
+            console.warn('⚠️  Redis unavailable. Bug AI job skipped.');
             return null;
         }
         return this.bugAiQueue.add('generate-bug-report', data);

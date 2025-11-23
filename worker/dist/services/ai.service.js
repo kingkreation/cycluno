@@ -1,0 +1,190 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AiService = void 0;
+const generative_ai_1 = require("@google/generative-ai");
+class AiService {
+    constructor() {
+        this.genAI = null;
+        this.model = null;
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            console.warn('GEMINI_API_KEY not set. AI features will be disabled.');
+            return;
+        }
+        try {
+            this.genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+            this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            console.log('Gemini AI initialized in worker');
+        }
+        catch (error) {
+            console.error('Failed to initialize Gemini AI:', error.message);
+        }
+    }
+    async extractFeaturesFromPRD(prdContent) {
+        if (!this.model) {
+            console.warn('Gemini AI not available. Returning empty features.');
+            return [];
+        }
+        const prompt = `
+You are a product analyst. Extract all features from the following PRD (Product Requirements Document).
+
+For each feature, provide:
+- name: Short feature name
+- description: Brief description
+- priority: High, Medium, or Low
+
+Return ONLY a valid JSON array of features, no markdown, no code blocks, no other text.
+
+PRD Content:
+${prdContent}
+
+Example format:
+[
+  {
+    "name": "User Authentication",
+    "description": "Secure login and registration system",
+    "priority": "High"
+  }
+]
+    `;
+        try {
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            const features = JSON.parse(cleanText);
+            return Array.isArray(features) ? features : [];
+        }
+        catch (error) {
+            console.error('Gemini AI Feature Extraction Error:', error.message);
+            return [];
+        }
+    }
+    async generateTestCases(featureName, featureDescription) {
+        if (!this.model) {
+            console.warn('Gemini AI not available. Returning empty test cases.');
+            return [];
+        }
+        const prompt = `
+You are a QA engineer. Generate comprehensive test cases for the following feature.
+
+Feature Name: ${featureName}
+Feature Description: ${featureDescription || 'No description provided'}
+
+For each test case, provide:
+- scenario: Test scenario name
+- description: Brief description of what is being tested
+- steps: Array of step-by-step instructions (as strings)
+- testData: Sample test data (if applicable, otherwise empty string)
+- expectedResult: Expected outcome
+- priority: High, Medium, or Low
+
+Generate at least 5 diverse test cases covering positive, negative, edge cases, and boundary conditions.
+
+Return ONLY a valid JSON array of test cases, no markdown, no code blocks, no other text.
+
+Example format:
+[
+  {
+    "scenario": "Valid user login",
+    "description": "Test successful login with valid credentials",
+    "steps": ["Navigate to login page", "Enter valid email", "Enter valid password", "Click login button"],
+    "testData": "email: test@example.com, password: Test123!",
+    "expectedResult": "User is redirected to dashboard",
+    "priority": "High"
+  }
+]
+    `;
+        try {
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            const testCases = JSON.parse(cleanText);
+            return Array.isArray(testCases) ? testCases : [];
+        }
+        catch (error) {
+            console.error('Gemini AI Test Case Generation Error:', error.message);
+            return [];
+        }
+    }
+    async generateBugReport(testCase, actualResult) {
+        if (!this.model) {
+            console.warn('Gemini AI not available. Returning basic bug report.');
+            return {
+                title: 'Test Failed: ' + (testCase.scenario || 'Unknown'),
+                description: 'Automated bug report generation unavailable',
+                stepsToReproduce: testCase.steps || [],
+                expectedResult: testCase.expectedResult || 'Not specified',
+                actualResult: actualResult,
+                possibleSolution: 'Manual investigation required',
+                priority: 'Medium',
+                severity: 'Major',
+            };
+        }
+        const prompt = `
+You are a QA engineer. A test case has failed. Generate a detailed bug report.
+
+Test Case Information:
+- Scenario: ${testCase.scenario}
+- Expected Result: ${testCase.expectedResult}
+- Actual Result: ${actualResult}
+- Steps: ${JSON.stringify(testCase.steps)}
+
+Generate a bug report with:
+- title: Clear, concise bug title (max 100 characters)
+- description: Detailed description of the bug
+- stepsToReproduce: Array of steps to reproduce the bug (as strings)
+- expectedResult: What should happen
+- actualResult: What actually happened
+- possibleSolution: Suggested fix or root cause analysis
+- priority: Critical, High, Medium, or Low
+- severity: Critical, Major, Minor, or Trivial
+
+Return ONLY a valid JSON object, no markdown, no code blocks, no other text.
+
+Example format:
+{
+  "title": "Login fails with valid credentials",
+  "description": "Users cannot log in even with correct email and password",
+  "stepsToReproduce": ["Go to login page", "Enter valid credentials", "Click login"],
+  "expectedResult": "User should be logged in",
+  "actualResult": "Error message displayed",
+  "possibleSolution": "Check authentication service connection",
+  "priority": "High",
+  "severity": "Major"
+}
+    `;
+        try {
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const cleanText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim();
+            const bugReport = JSON.parse(cleanText);
+            return bugReport;
+        }
+        catch (error) {
+            console.error('Gemini AI Bug Report Generation Error:', error.message);
+            return {
+                title: 'Test Failed: ' + testCase.scenario,
+                description: 'Automated bug report generation failed. ' + error.message,
+                stepsToReproduce: testCase.steps || [],
+                expectedResult: testCase.expectedResult,
+                actualResult,
+                possibleSolution: 'Manual investigation required',
+                priority: 'Medium',
+                severity: 'Major',
+            };
+        }
+    }
+}
+exports.AiService = AiService;
