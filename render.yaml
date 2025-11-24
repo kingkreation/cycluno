@@ -4,7 +4,6 @@ services:
     env: node
     region: oregon
     plan: free
-    rootDir: backend
     buildCommand: cd backend && npm install && npx prisma generate && npm run build
     startCommand: cd backend && npx prisma migrate deploy && npm run start:prod
     envVars:
@@ -39,4 +38,34 @@ databases:
   - name: cycluno-db
     databaseName: cycluno
     user: cycluno
+=======
+services:
+  - type: web
+    name: cycluno-backend
+    env: node
+    buildCommand: npm install && npm run build && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm run start:prod
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cycluno-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: cycluno-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: cycluno-db
+    databaseName: cycluno
+    user: cycluno
+  
+  - name: cycluno-redis
+>>>>>>> 21341e81b03027195db954237a075ea596ffa217
     plan: free
